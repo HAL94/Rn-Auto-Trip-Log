@@ -1,10 +1,11 @@
 import React, { Component } from 'react';
 import Geolocation from '@react-native-community/geolocation';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Switch, StyleSheet } from 'react-native';
 import MapViewer from '../MapViewer/MapViewer';
 import { Dimensions } from "react-native";
 import { Alert } from 'react-native';
-import { check, requestMultiple, PERMISSIONS, RESULTS } from 'react-native-permissions';
+import ActivityRecognition from 'react-native-activity-recognition';
+import { checkMultiple, requestMultiple, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 const width = Dimensions.get('window').width; //full width
 const height = Dimensions.get('window').height; //full height
@@ -23,67 +24,49 @@ export default class PositionTracker extends Component {
     constructor() {
         super();
         this.state = {
-            location: null
+            location: null,
+            switchValue: false,
+            unsubscribe: null,
+            detectedActivity: null,
+            watchId: null
         }
-
-        // this.requestActivityRecognitionPermission();       
+        this.enableLocationWithActivity = this.enableLocationWithActivity.bind(this);   
     }
 
-    checkActivityRecognitionPermission = () => {
-        check(PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION)
-            .then((result) => {
-                switch (result) {
-                case RESULTS.UNAVAILABLE:
-                    console.log('This feature is not available (on this device / in this context)');
-                    break;
-                case RESULTS.DENIED:
-                    console.log('The permission has not been requested / is denied but requestable');
-                    break;
-                case RESULTS.LIMITED:
-                    console.log('The permission is limited: some actions are possible');
-                    break;
-                case RESULTS.GRANTED:
-                    console.log('The permission is granted');
-                    break;
-                case RESULTS.BLOCKED:
-                    console.log('The permission is denied and not requestable anymore');
-                    break;
-                }
-            })
-            .catch((error) => {
-                console.log('error', error);
-            });
-    };
+    watchActivity() {
+        const subscription = ActivityRecognition.subscribe(detectedActivities => {
+            const mostProbable = detectedActivities.sorted[0];
+            console.log('MostProbable', mostProbable);
+            this.setState({detectedActivity: JSON.stringify(mostProbable)});
+            if (mostProbable['type'] === 'IN_VEHICLE') {
+                this.watchPosition();
+            }
+          });
+        this.setState({unsubscribe: subscription});
+        ActivityRecognition.start(1000, 0);
+    }
 
-    checkActivityRecognitionPermission = () => {
-        check(PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION)
-            .then((result) => {
-                switch (result) {
-                case RESULTS.UNAVAILABLE:
-                    console.log('This feature is not available (on this device / in this context)');
-                    break;
-                case RESULTS.DENIED:
-                    console.log('The permission has not been requested / is denied but requestable');
-                    break;
-                case RESULTS.LIMITED:
-                    console.log('The permission is limited: some actions are possible');
-                    break;
-                case RESULTS.GRANTED:
-                    console.log('The permission is granted');
-                    break;
-                case RESULTS.BLOCKED:
-                    console.log('The permission is denied and not requestable anymore');
-                    break;
-                }
-            })
-            .catch((error) => {
-                console.log('error', error);
-            });
-    };
-
-    requestPermission = (permissionType) => {
-        return request(PERMISSIONS.ANDROID[permissionType]);
-    };
+    enableLocationWithActivity(value) {
+        this.setState({switchValue: value});
+        if (value) {
+            console.log('Auto Track Turned ON');
+            checkMultiple([PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION, PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION])
+                .then((statuses) => {
+                    console.log('ACCESS_FINE_LOCATION', statuses[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION], "Checked");
+                    console.log('ACTIVITY_RECOGNITION', statuses[PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION], "Checked");
+                    const fineLocationResult = statuses[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION];
+                    const activityRecognitionResult = statuses[PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION];
+                    if (activityRecognitionResult === RESULTS.GRANTED && fineLocationResult === RESULTS.GRANTED) { 
+                        this.watchActivity();                    
+                    } else {
+                        this.requestPermissions();
+                    }
+                });
+        } else {
+            this.stopWatchServices();
+            console.log('Auto Track Turned OFF');
+        }   
+    }   
 
     
     watchPosition() {
@@ -92,34 +75,59 @@ export default class PositionTracker extends Component {
           }, error => Alert.alert('Error', JSON.stringify(error)), {enableHighAccuracy: true, distanceFilter: 1});
     }
 
-    componentDidMount() {
+    
+    stopWatchServices() {
+        if (this.state.watchId) {
+            Geolocation.stopWatch(this.state.watchId);
+        }
+        if (this.state.unsubscribe) {
+            ActivityRecognition.stop()
+        }
+    }
+
+    requestPermissions() {
         requestMultiple([PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION, PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION])
             .then((statuses) => {
                 console.log('ACCESS_FINE_LOCATION', statuses[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION]);
                 console.log('ACTIVITY_RECOGNITION', statuses[PERMISSIONS.ANDROID.ACTIVITY_RECOGNITION]);
-                const fineLocationResult = statuses[PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION];
-                if (fineLocationResult === RESULTS.GRANTED) {
-                    this.watchPosition();
-                }
             }); 
     }
 
+    componentDidMount() {
+        this.requestPermissions();
+    }
+
+    componentWillUnmount() {
+        if (this.state.unsubscribe) {
+            this.state.unsubscribe();
+        }
+    }
+
     render() {
+        let switchView = (
+            <Switch 
+                onValueChange={this.enableLocationWithActivity}
+                value={this.state.switchValue}
+            />
+        );
         let displayView;
 
         if (this.state.location) {
             displayView = (
                 <MapViewer location={this.state.location}/>
             );
-        } else {
-            displayView = (
-                <Text>Waiting...</Text>
-            );
-        }
+        } 
 
+        let detectedActvity;
+        
+        if (this.state.detectedActivity) {
+            detectedActvity = <Text>Detected Activity: {this.state.detectedActivity}</Text>
+        }
 
         return (
             <View style={styles.container}>
+                {detectedActvity}
+                {switchView}
                 {displayView}
             </View>
         );

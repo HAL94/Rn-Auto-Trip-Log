@@ -1,11 +1,10 @@
 import React, { Component } from 'react';
-// import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { StyleSheet, View, Text } from 'react-native';
 
 import Aux from '../Hoc/Jack';
 import TripInfo from '../TripInfo/TripInfo';
 import haversine from 'haversine';
-import ActivityRecognition from 'react-native-activity-recognition';
+
 
 const styles = StyleSheet.create({
     infoWrapper: {
@@ -28,8 +27,7 @@ export default class MapViewer extends Component {
         speed: null,
         distance: null,
         prevCoordinate: null,
-        unsubscribe: null,
-        detectedActivity: null
+        unsubscribe: null
     }
 
     getHeading = (x) => {
@@ -78,46 +76,19 @@ export default class MapViewer extends Component {
     
     
     componentDidMount() {
-        // console.log(PERMISSIONS.ANDROID);
-        this.updateTracking();
-        
-        
-        this.state.unsubscribe = ActivityRecognition.subscribe(detectedActivities => {
-            const mostProbable = detectedActivities.sorted[0];
-            console.log('DetectedActivity', mostProbable);
-            const displayText = (
-                <Text>
-                    {JSON.stringify(mostProbable)}
-                </Text>
-            )
-            this.setState({detectedActivity: displayText})
-          });
-        ActivityRecognition.start(1000, 0);
+        this.updateTracking();      
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevProps.location.coords != this.props.location.coords) {
             this.updateTracking();
-        }
-        
+        }        
     }
 
     render() {
         return (
             <Aux>
-                {/* <MapView style={styles.map}
-                provider={PROVIDER_GOOGLE}
-                showsUserLocation={true}
-                followsUserLocation={true}
-                initialRegion={{
-                    latitude: this.props.location.coords.latitude,
-                    longitude: this.props.location.coords.longitude,
-                    latitudeDelta: 0.02,
-                    longitudeDelta: 0.02
-                }}        
-                >
-                </MapView> */}
-                {this.state.detectedActivity}
+                {/* A map was here, hence the class called MapViewer */}
                 <View style={styles.infoWrapper}>
                     <TripInfo title="Distance" unit="km" value={this.state.distance} />
                     <TripInfo title="Speed" unit="km/h" value={this.state.speed} />
